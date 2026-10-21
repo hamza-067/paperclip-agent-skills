@@ -1,0 +1,41 @@
+name: Validate skill library
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Validate skill structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' file; do
+            count=$((count + 1))
+            echo "Checking $file"
+            head -n 1 "$file" | grep -qx -- '---' || {
+              echo "ERROR: missing YAML frontmatter start in $file"; exit 1;
+            }
+            awk 'NR > 1 && /^---[[:space:]]*$/ { found=1; exit } END { exit !found }' "$file" || {
+              echo "ERROR: missing YAML frontmatter end in $file"; exit 1;
+            }
+            grep -Eq '^name:[[:space:]]*[^[:space:]].*$' "$file" || {
+              echo "ERROR: missing name field in $file"; exit 1;
+            }
+            grep -Eq '^description:[[:space:]]*[^[:space:]].*$' "$file" || {
+              echo "ERROR: missing description field in $file"; exit 1;
+            }
+          done < <(find skills -name SKILL.md -print0)
+          test "$count" -gt 0 || {
+            echo "ERROR: no skills found under skills/"; exit 1;
+          }
+          echo "Validated $count skill files."
